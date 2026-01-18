@@ -1,0 +1,15 @@
+2026-01-15 10:00:01 GET /api/users 200 1200ms
+2026-01-15 10:00:02 GET /api/users 200 800ms
+2026-01-15 10:00:03 GET /api/users 200 1000ms
+
+2026-01-15 10:01:01 POST /api/orders 200 2500ms
+2026-01-15 10:01:02 POST /api/orders 200 2600ms
+
+2026-01-15 10:02:01 GET /api/payments 200 1800ms
+2026-01-15 10:02:02 GET /api/payments 200 2200ms
+2026-01-15 10:02:03 GET /api/payments 200 2000ms
+2026-01-15 10:02:04 GET /api/payments 200 2000ms
+
+2026-01-15 10:03:01 GET /api/reports 200 3000ms
+2026-01-15 10:03:02 GET /api/reports 200 3200ms
+2026-01-15 10:03:03 GET /api/reports 200 2800ms
