@@ -16,13 +16,9 @@ Usage:
 """
 
 import copy
-import logging
 import os
 import sys
 from typing import Dict, List, Any, Set
-
-# Set up logger
-logger = logging.getLogger(__name__)
 
 
 class MissingConfigError(Exception):
@@ -32,39 +28,21 @@ class MissingConfigError(Exception):
 
 def deep_merge(base: Dict[str, Any], override: Dict[str, Any], visited: Set[int] = None) -> Dict[str, Any]:
     """Deep merge two dictionaries without mutating the original."""
-    # visited: Parameter name tracking processed objects
-    # Set[int]: Type hint - set containing integers (object IDs)
-    # = None: Default value making parameter optional for first call
-    # Why: Prevents infinite recursion in circular references
+    if visited is None:
+        visited = set()
     
-    if visited is None:  # First call initialization
-        visited = set()  # Create empty set to track object IDs
+    # Circular reference protection
+    base_id = id(base)
+    if base_id in visited:
+        return copy.deepcopy(base)
+    visited.add(base_id)
     
-    # Circular reference protection - prevents infinite loops
-    base_id = id(base)  # Get unique integer ID of base dictionary object
-    if base_id in visited:  # Already processed this exact object?
-        return copy.deepcopy(base)  # Return safe copy, stop recursion
-    visited.add(base_id)  # Mark this object ID as "seen"
-    
-    # result: Variable name for our working copy
-    # =: Assignment operator
-    # copy.deepcopy(base): Creates completely independent copy of base
-    # Why deepcopy: Recursively copies all nested objects, prevents mutation
     result = copy.deepcopy(base)
     
-    # Iterate through each key-value pair in override dictionary
     for key, value in override.items():
-        # Check if we need to merge dictionaries recursively:
-        # 1. key exists in result (base had this key)
-        # 2. result[key] is dict (base value is dictionary)
-        # 3. value is dict (override value is also dictionary)
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            # Recursive merge: merge nested dictionaries
-            # visited.copy(): Pass copy of visited set to avoid cross-contamination
             result[key] = deep_merge(result[key], value, visited.copy())
         else:
-            # Simple override: replace base value with override value
-            # copy.deepcopy(value): Ensure we don't share references
             result[key] = copy.deepcopy(value)
     
     return result
@@ -72,60 +50,46 @@ def deep_merge(base: Dict[str, Any], override: Dict[str, Any], visited: Set[int]
 
 def get_nested_value(config: Dict[str, Any], key_path: str) -> Any:
     """Get value from nested dictionary using dot notation."""
-    # Split dot-separated path into individual keys
-    # Example: "database.port" becomes ["database", "port"]
     keys = key_path.split('.')
-    value = config  # Start traversal from root config
+    value = config
     
-    # Navigate through each key in the path
     for key in keys:
-        # Safety checks before accessing nested key:
-        # 1. Current value must be a dictionary
-        # 2. Key must exist in current dictionary
         if not isinstance(value, dict) or key not in value:
-            return None  # Path doesn't exist, return None
-        value = value[key]  # Move deeper into nested structure
+            return None
+        value = value[key]
     
-    return value  # Return the final nested value
+    return value
 
 
 def apply_env_overrides(config: Dict[str, Any]) -> Dict[str, Any]:
     """Apply environment variable overrides to config."""
-    # Create independent copy to avoid mutating input
     result = copy.deepcopy(config)
     
-    # Dictionary mapping environment variable names to config paths
-    # Key: Environment variable name (what to look for in os.environ)
-    # Value: Dot-notation path in config (where to set the value)
+    # Map environment variables to config paths
     env_mappings = {
-        'APP_DATABASE_HOST': 'database.host',  # Maps APP_DATABASE_HOST -> config['database']['host']
-        'APP_DATABASE_PORT': 'database.port',  # Maps APP_DATABASE_PORT -> config['database']['port']
-        'APP_VERSION': 'version',              # Maps APP_VERSION -> config['version']
-        'APP_NAME': 'app_name'                 # Maps APP_NAME -> config['app_name']
+        'APP_DATABASE_HOST': 'database.host',
+        'APP_DATABASE_PORT': 'database.port',
+        'APP_VERSION': 'version',
+        'APP_NAME': 'app_name'
     }
     
-    # Process each environment variable mapping
     for env_var, config_path in env_mappings.items():
-        # Get environment variable value (returns None if not set)
         env_value = os.getenv(env_var)
-        if env_value is not None:  # Process if environment variable exists (including empty strings and "0")
-            # Smart type conversion for known numeric fields
-            if config_path.endswith('.port'):  # Port numbers should be integers
+        if env_value:
+            # Type conversion for known numeric fields
+            if config_path.endswith('.port'):
                 try:
-                    env_value = int(env_value)  # Convert string to integer
+                    env_value = int(env_value)
                 except ValueError:
-                    logger.warning(f"Invalid port value '{env_value}' for config path '{config_path}'. Skipping override.")
-                    continue  # Skip invalid port values
+                    continue
             
-            # Navigate to nested location and set value
-            keys = config_path.split('.')  # Split path into individual keys
-            current = result  # Start from root of config
-            # Navigate to parent of target key (all keys except last)
+            # Set nested value
+            keys = config_path.split('.')
+            current = result
             for key in keys[:-1]:
-                if key not in current:  # Create missing intermediate dictionaries
+                if key not in current:
                     current[key] = {}
-                current = current[key]  # Move deeper
-            # Set the final value using the last key in path
+                current = current[key]
             current[keys[-1]] = env_value
     
     return result
@@ -211,8 +175,7 @@ def main():
         print(f"  features: {merged_config['features']}")
         
         # Verify original config wasn't mutated
-        if base_config.get('version') != "1.0.0":
-            raise RuntimeError("Original config was mutated!")
+        assert base_config['version'] == "1.0.0", "Original config was mutated!"
         print("\n✅ Original configuration preserved (no mutation)")
         
         return merged_config
